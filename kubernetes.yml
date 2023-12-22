@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongodb-cleanup
+  namespace: mongodb
+data:
+  BACKUP_PATH: "/test/backupdb/backup"
+  BACKUP_RETENTION: "7"
+
+---
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-dump
+  namespace: mongodb
+data:
+  M-USER: "test / base64"
+  M-PASS: "test / base64"
+type: Opaque
+
+---
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mongodump-backup
+  namespace: mongodb
+spec:
+  schedule: "0 1 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          volumes:
+            - name: mongodump
+              hostPath:
+                path: /test/backups/mdb
+          restartPolicy: Never
+          containers:
+            - name: mongodb-backup
+              image: docker.io/bitnami/mongodb:4.4.15-debian-10-r8
+              imagePullPolicy: IfNotPresent
+              securityContext:
+                runAsUser: 0
+                runAsGroup: 0
+                privileged: true
+              envFrom:
+                - secretRef:
+                    name: mongodb-dump
+              command : ["/bin/sh", "-c"]
+              args: ["mongodump --uri \"mongodb://mongodb.mongodb.svc.cluster.local\" -u $(M-USER) -p $(M-PASS) --authenticationDatabase test --gzip --archive=/test/backupdb/backup/$(date +\"%d%m%Y\").gz"]
+              volumeMounts:
+                - mountPath: "/test/backupdb/backup"
+                  name: mongodump
+            - name: mongodb-cleanup
+              image: devopsdarkmaster/gzip-gardener:v1.0.0
+              imagePullPolicy: IfNotPresent
+              securityContext:
+                runAsUser: 0
+                runAsGroup: 0
+                privileged: true
+              envFrom:
+                - configMapRef:
+                    name: mongodb-cleanup
+              volumeMounts:
+                - mountPath: "/test/backupdb/backup"
+                  name: mongodump
+          nodeSelector:
+            mongodb: backuptest

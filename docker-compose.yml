@@ -1,0 +1,9 @@
+version: '3.8'
+services:
+  backup-cleaner:
+    image: devopsdarkmaster/gzip-gardener:v1.0.0
+    environment:
+      BACKUP_RETENTION: '/backups'
+      BACKUP_INTERVAL: '7'
+    volumes:
+      - /test/mdb:/backups
